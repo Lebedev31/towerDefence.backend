@@ -1,0 +1,11 @@
+# Исключить все файлы сборки и временные файлы
+*.log
+*.tmp
+*.cache
+*.env
+node_modules/
+dist/
+build/
+.DS_Store
+.idea/
+.vscode/
