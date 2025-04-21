@@ -13,6 +13,18 @@ export interface User extends Auth {
 
 export interface UserPublicData {
   // Публичные данные пользователя
-  name: string;
   email: string;
+  name: string;
+}
+
+export interface AuthPublicData {
+  message: string;
+}
+
+export interface EnvConfig {
+  MONGODB_URI: string;
+  PORT: string;
+  FRONTEND_URL: string;
+  JWT_SECRET_REFRESH: string;
+  JWT_SECRET_ACCESS: string;
 }

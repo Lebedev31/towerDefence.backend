@@ -21,19 +21,18 @@ export class UserService {
     if (find) {
       throw new ConflictException('Пользователь с таким email уже существует');
     }
-
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
+      console.log(hashedPassword);
       const user = new this.userModel({
         name,
         email,
         password: hashedPassword,
       });
-
       const save = await user.save();
       const result: UserPublicData = {
-        name: save.name,
         email: save.email,
+        name: save.name,
       };
       return result;
     } catch (error) {
