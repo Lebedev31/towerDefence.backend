@@ -23,7 +23,6 @@ export class UserService {
     }
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
-      console.log(hashedPassword);
       const user = new this.userModel({
         name,
         email,

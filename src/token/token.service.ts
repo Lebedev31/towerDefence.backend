@@ -8,7 +8,7 @@ type AuthToken = {
   refreshToken: string;
 };
 
-type JwtPayload = {
+export type JwtPayload = {
   sub: string;
   email: string;
 };
