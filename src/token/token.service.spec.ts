@@ -8,9 +8,6 @@ const email = 'test1@gmail.com';
 
 describe('Проверка TokenService', () => {
   let service: TokenService;
-  let jwtService: JwtService;
-  let configService: ConfigService;
-
   const mockConfigService = {
     get: jest.fn((key: string) => {
       if (key === 'JWT_SECRET_REFRESH') {
@@ -22,8 +19,14 @@ describe('Проверка TokenService', () => {
   };
 
   const mockJwtService = {
-    sign: jest.fn((payload: JwtPayload) => {
-      return `token ${payload.email}`;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    sign: jest.fn((payload: { email: string }) => {
+      return `token ${email}`;
+    }),
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    verify: jest.fn((token: string): JwtPayload => {
+      return { email };
     }),
   };
 
@@ -43,8 +46,6 @@ describe('Проверка TokenService', () => {
     }).compile();
 
     service = module.get<TokenService>(TokenService);
-    jwtService = module.get<JwtService>(JwtService);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   afterEach(() => {
@@ -60,12 +61,52 @@ describe('Проверка TokenService', () => {
   });
 
   it('Проверка метода createTokens', () => {
-    mockConfigService.get.mockReturnValue('secret');
-    mockJwtService.sign.mockReturnValue('token');
     const createTokens = service.createTokens(email);
 
-    expect(createTokens).toHaveBeenCalledTimes(1);
-    expect(configService).toHaveBeenCalledTimes(1);
-    expect(jwtService).toHaveBeenCalledTimes(1);
+    expect(mockConfigService.get).toHaveBeenCalledTimes(1);
+    expect(mockConfigService.get).toHaveBeenCalledWith('JWT_SECRET_REFRESH');
+    expect(mockConfigService.get('JWT_SECRET_REFRESH')).toEqual('secret');
+
+    expect(mockJwtService.sign).toHaveBeenCalledTimes(2);
+    expect(mockJwtService.sign).toHaveBeenCalledWith(
+      { payload: email },
+      { expiresIn: '15m' },
+    );
+
+    expect(mockJwtService.sign).toHaveBeenCalledWith(
+      { payload: email },
+      { expiresIn: '7d', secret: 'secret' },
+    );
+
+    expect(createTokens).not.toBe(undefined);
+    expect(createTokens).toEqual({
+      accessToken: `token ${email}`,
+      refreshToken: `token ${email}`,
+    });
+  });
+
+  it('проверка метода createAccessToken', () => {
+    const createAccessToken = service.createAccessToken(email);
+
+    expect(mockConfigService.get).not.toHaveBeenCalled();
+    expect(mockJwtService.sign).toHaveBeenCalledTimes(1);
+    expect(createAccessToken).toEqual(`token ${email}`);
+  });
+
+  it('проверка метода createRefreshToken', () => {
+    const createRefreshToken = service.createRefreshToken(email);
+
+    expect(mockConfigService.get).toHaveBeenCalled();
+    expect(mockJwtService.sign).toHaveBeenCalledTimes(1);
+    expect(createRefreshToken).toEqual(`token ${email}`);
+  });
+
+  it('Проверка метода verifyToken', () => {
+    const verifyToken = service.verifyToken(email, true);
+
+    expect(mockConfigService.get).toHaveBeenCalled();
+    expect(mockJwtService.verify).toHaveBeenCalled();
+    expect(verifyToken).not.toBe(undefined);
+    expect(verifyToken).toEqual({ email });
   });
 });

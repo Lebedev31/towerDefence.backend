@@ -55,8 +55,4 @@ export class AuthService {
       throw new InternalServerErrorException('Неизестная серверная ошибка');
     }
   }
-
-  setAuthorization(response: Response, accessToken: string): void {
-    response.set('Authorization', `Bearer${accessToken}`);
-  }
 }

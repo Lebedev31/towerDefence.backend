@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from 'src/type/type';
+import { Response } from 'express';
 
 type AuthToken = {
   accessToken: string;
@@ -9,7 +10,6 @@ type AuthToken = {
 };
 
 export type JwtPayload = {
-  sub: string;
   email: string;
 };
 
@@ -27,14 +27,16 @@ export class TokenService {
   ): string {
     const pay = { payload };
     if (toggleSecretEnv) {
-      const refreshSecret =
-        this.configService.get<string>('JWT_SECRET_REFRESH');
       return this.jwtService.sign(pay, {
         expiresIn: exp,
-        secret: refreshSecret,
+        secret: this.getEnvRefreshSecret(),
       });
     }
     return this.jwtService.sign(pay, { expiresIn: exp });
+  }
+
+  private getEnvRefreshSecret() {
+    return this.configService.get<string>('JWT_SECRET_REFRESH');
   }
 
   createTokens(payload: string): AuthToken {
@@ -51,7 +53,16 @@ export class TokenService {
     return this.generateToken(payload, '7d', true);
   }
 
-  verifyToken(token: string): JwtPayload {
+  verifyToken(token: string, toggleSecretEnv: boolean): JwtPayload {
+    if (toggleSecretEnv) {
+      return this.jwtService.verify(token, {
+        secret: this.getEnvRefreshSecret(),
+      });
+    }
     return this.jwtService.verify<JwtPayload>(token);
+  }
+
+  setAuthorization(response: Response, accessToken: string): void {
+    response.set('Authorization', `Bearer ${accessToken}`);
   }
 }

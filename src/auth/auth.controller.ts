@@ -26,7 +26,7 @@ export class AuthController {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const login = await this.authService.login(email, password);
     const tokens = this.tokenService.createTokens(email);
-    this.authService.setAuthorization(response, tokens.accessToken);
+    this.tokenService.setAuthorization(response, tokens.accessToken);
     this.authService.setCreateCookie(response, tokens.refreshToken);
     response.status(301).redirect('/menu');
   }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UserModule } from './user/user.module';
@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { TokenModule } from './token/token.module';
 import { EnvConfig } from './type/type';
 import { CommonModule } from './config/config.jwt';
+import { AvtorizationMiddleware } from './middleware/avtorization.middleware';
 
 @Module({
   imports: [
@@ -26,4 +27,8 @@ import { CommonModule } from './config/config.jwt';
     TokenModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AvtorizationMiddleware).forRoutes('');
+  }
+}
