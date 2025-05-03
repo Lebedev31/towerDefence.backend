@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { TokenService } from './token.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from './token.service';
+import { Response } from 'express';
 
 const email = 'test1@gmail.com';
 
@@ -17,6 +19,10 @@ describe('Проверка TokenService', () => {
       }
     }),
   };
+
+  const mockResponse = {
+    set: jest.fn(),
+  } as unknown as Response;
 
   const mockJwtService = {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -108,5 +114,15 @@ describe('Проверка TokenService', () => {
     expect(mockJwtService.verify).toHaveBeenCalled();
     expect(verifyToken).not.toBe(undefined);
     expect(verifyToken).toEqual({ email });
+  });
+
+  it('Проверка метода setAuthorization', () => {
+    service.setAuthorization(mockResponse, 'testToken');
+
+    // Проверяем, что внутри метода была вызвана функция set на mockResponse
+    expect(mockResponse.set).toHaveBeenCalledWith(
+      'Authorization',
+      'Bearer testToken',
+    );
   });
 });

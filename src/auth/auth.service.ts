@@ -36,6 +36,13 @@ export class AuthService {
     });
   }
 
+  clearCookie(response: Response): void {
+    response.clearCookie('token', {
+      httpOnly: true,
+      sameSite: 'strict',
+    });
+  }
+
   async login(email: string, password: string): Promise<void> {
     try {
       const find = await this.userModel.findOne({ email });

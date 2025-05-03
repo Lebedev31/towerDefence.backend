@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { TokenModule } from './token/token.module';
 import { EnvConfig } from './type/type';
 import { CommonModule } from './config/config.jwt';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AvtorizationMiddleware } from './middleware/avtorization.middleware';
 
 @Module({
@@ -28,7 +29,8 @@ import { AvtorizationMiddleware } from './middleware/avtorization.middleware';
   ],
 })
 export class AppModule implements NestModule {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(AvtorizationMiddleware).forRoutes('');
+    //  consumer.apply(AvtorizationMiddleware).forRoutes('');
   }
 }
