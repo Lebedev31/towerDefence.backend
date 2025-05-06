@@ -8,6 +8,7 @@ import { EnvConfig } from './type/type';
 import { CommonModule } from './config/config.jwt';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AvtorizationMiddleware } from './middleware/avtorization.middleware';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AvtorizationMiddleware } from './middleware/avtorization.middleware';
     AuthModule,
     CommonModule,
     TokenModule,
+    ChatModule,
   ],
 })
 export class AppModule implements NestModule {

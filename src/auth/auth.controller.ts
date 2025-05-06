@@ -15,7 +15,6 @@ export class AuthController {
   async register(
     @Body() registrationDto: RegistrationDto,
   ): Promise<MessageClient> {
-    console.log(5);
     const { name, email, password } = registrationDto;
     await this.authService.registration(name, email, password);
     return { message: { success: true } };
@@ -27,8 +26,8 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<MessageClient> {
     const { email, password } = authDto;
-    console.log(5);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     const login = await this.authService.login(email, password);
     const tokens = this.tokenService.createTokens(email);
     this.tokenService.setAuthorization(response, tokens.accessToken);
