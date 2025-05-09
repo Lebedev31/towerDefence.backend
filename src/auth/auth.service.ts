@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { User, UserPublicData } from '../type/type';
+import { User, UserPublicData, AuthPublicData } from '../type/type';
 import { Model } from 'mongoose';
 import { UserService } from '../user/user.service';
 import { Response } from 'express';
@@ -43,7 +43,7 @@ export class AuthService {
     });
   }
 
-  async login(email: string, password: string): Promise<void> {
+  async login(email: string, password: string): Promise<AuthPublicData> {
     try {
       const find = await this.userModel.findOne({ email });
       if (!find) {
@@ -53,6 +53,8 @@ export class AuthService {
       if (!decode) {
         throw new UnauthorizedException('Неправильный пароль');
       }
+      const id = find._id as string;
+      return { id, name: find.name };
     } catch (error) {
       console.log(error);
       if (error instanceof HttpException) {

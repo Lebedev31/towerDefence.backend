@@ -1,4 +1,10 @@
-import { Controller, Post, Body, Res } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegistrationDto, AuthDto } from './auth.dto';
 import { Response } from 'express';
@@ -27,12 +33,15 @@ export class AuthController {
   ): Promise<MessageClient> {
     const { email, password } = authDto;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-
-    const login = await this.authService.login(email, password);
-    const tokens = this.tokenService.createTokens(email);
-    this.tokenService.setAuthorization(response, tokens.accessToken);
-    this.authService.setCreateCookie(response, tokens.refreshToken);
-    return { message: { success: true } };
+    const personalData = await this.authService.login(email, password);
+    if (personalData) {
+      const tokens = this.tokenService.createTokens(email);
+      this.tokenService.setAuthorization(response, tokens.accessToken);
+      this.authService.setCreateCookie(response, tokens.refreshToken);
+      return { message: { success: true, personalData } };
+    } else {
+      throw new UnauthorizedException('Отсутсвует id пользователя и логин');
+    }
   }
 
   @Post('logout')

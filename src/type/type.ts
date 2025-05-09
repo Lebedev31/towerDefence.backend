@@ -16,9 +16,9 @@ export interface UserPublicData {
   email: string;
   name: string;
 }
-
 export interface AuthPublicData {
-  message: string;
+  id: string;
+  name: string;
 }
 
 export interface EnvConfig {
