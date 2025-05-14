@@ -2,13 +2,13 @@ import {
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
-  MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
+import { ChatService } from './chat.service';
 import { Socket, Server } from 'socket.io';
-import { AuthPublicData } from '../type/type';
+import { Injectable } from '@nestjs/common';
 
-type Client = {
+export type Client = {
   id: string;
   socket: Socket;
   infoClient?: {
@@ -27,8 +27,11 @@ export enum SocketChatListener {
     origin: '*',
   },
   transport: ['websocket', 'polling'],
+  namespace: '/chat',
 })
+@Injectable()
 export class ChatGateway {
+  constructor(private readonly chatService: ChatService) {}
   private clients = new Map<string, Client>();
   @WebSocketServer()
   private server: Server;
@@ -44,29 +47,37 @@ export class ChatGateway {
   private handleDisconnect(client: Socket) {
     this.clients.delete(client.id);
     console.log(`Клиент отключился: ${client.id}`);
+    this.broadcastClientsList();
   }
 
-  private getListClients() {
-    const clients = Array.from(this.clients.values())
-      .filter((obj) => obj.infoClient !== undefined)
+  private getOtherClients(currentId: string) {
+    return Array.from(this.clients.values())
+      .filter((client) => client.infoClient && client.id !== currentId)
       .map((client) => client.infoClient);
-    this.server.emit(SocketChatListener.GETCHATLIST, clients);
+  }
+
+  // Отправить всем актуальный список (каждому — без него самого)
+  private broadcastClientsList() {
+    for (const [id, client] of this.clients.entries()) {
+      if (client.infoClient) {
+        const others = this.getOtherClients(id);
+        client.socket.emit(SocketChatListener.GETCHATLIST, others);
+      }
+    }
   }
 
   @SubscribeMessage(SocketChatListener.PESRSONALDATA)
-  private setPersonalData(
-    @MessageBody() payload: AuthPublicData,
-    @ConnectedSocket() client: Socket,
-  ) {
+  private async setPersonalData(@ConnectedSocket() client: Socket) {
     const id = client.id;
+    const token = client.handshake.auth.token as string;
     const element = this.clients.get(id);
-    if (element) {
+    const payload = await this.chatService.getInfoClient(token);
+    if (element && !element.infoClient) {
       element.infoClient = payload;
-      this.getListClients();
+      this.broadcastClientsList();
     } else {
-      client.emit(SocketChatListener.GETCHATLIST, {
-        message: { success: false },
-      });
+      // Отправить только этому клиенту список других
+      client.emit(SocketChatListener.GETCHATLIST, this.getOtherClients(id));
     }
   }
 }

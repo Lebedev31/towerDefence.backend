@@ -37,7 +37,7 @@ export class AvtorizationGuard implements CanActivate {
       try {
         const verife = this.tokenService.verifyToken(cookieToken, true);
         const newAccessToken = this.tokenService.createAccessToken(
-          verife.email,
+          verife.payload,
         );
         this.tokenService.setAuthorization(response, newAccessToken);
         return true;

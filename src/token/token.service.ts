@@ -10,7 +10,7 @@ type AuthToken = {
 };
 
 export type JwtPayload = {
-  email: string;
+  payload: string;
 };
 
 @Injectable()
@@ -36,7 +36,7 @@ export class TokenService {
   }
 
   private getEnvRefreshSecret() {
-    return this.configService.get<string>('JWT_SECRET_REFRESH');
+    return this.configService.getOrThrow<string>('JWT_SECRET_REFRESH');
   }
 
   createTokens(payload: string): AuthToken {
@@ -54,12 +54,13 @@ export class TokenService {
   }
 
   verifyToken(token: string, toggleSecretEnv: boolean): JwtPayload {
+    const cleanToken = token.trim();
     if (toggleSecretEnv) {
-      return this.jwtService.verify(token, {
+      return this.jwtService.verify(cleanToken, {
         secret: this.getEnvRefreshSecret(),
       });
     }
-    return this.jwtService.verify<JwtPayload>(token);
+    return this.jwtService.verify<JwtPayload>(cleanToken);
   }
 
   setAuthorization(response: Response, accessToken: string): void {

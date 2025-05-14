@@ -10,7 +10,7 @@ import { EnvConfig } from '../type/type';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService<EnvConfig>) => ({
-        secret: configService.get<string>('JWT_SECRET_ACCESS'),
+        secret: configService.getOrThrow<string>('JWT_SECRET_ACCESS'),
         signOptions: { expiresIn: '15m' },
       }),
       inject: [ConfigService],
