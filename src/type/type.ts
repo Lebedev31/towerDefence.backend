@@ -27,6 +27,7 @@ export interface EnvConfig {
   FRONTEND_URL: string;
   JWT_SECRET_REFRESH: string;
   JWT_SECRET_ACCESS: string;
+  REDIS_URL: string;
 }
 
 export interface MessageClient {

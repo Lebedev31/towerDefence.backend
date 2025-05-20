@@ -23,7 +23,7 @@ export class ChatService {
         throw new WsException('Пользователь не найден');
       }
       const newId = user._id as string;
-      return { name: user.name, id: newId };
+      return { name: user.name, id: newId.toString() };
     } catch (error) {
       console.error('Ошибка при получении информации о пользователе:', error);
       if (error instanceof WsException) {
