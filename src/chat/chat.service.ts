@@ -5,12 +5,14 @@ import { User } from '../type/type';
 import { TokenService } from '../token/token.service';
 import { AuthPublicData } from '../type/type';
 import { WsException } from '@nestjs/websockets';
+import { Dialogue, MessageUser, Client } from './type/type';
 
 @Injectable()
 export class ChatService {
   constructor(
     @InjectModel('User') private readonly userModel: Model<User>,
     private readonly tokenService: TokenService,
+    @InjectModel('Dialogue') private readonly dialogueModel: Model<Dialogue>,
   ) {}
 
   async getInfoClient(token: string): Promise<AuthPublicData> {
@@ -31,5 +33,61 @@ export class ChatService {
       }
       throw new HttpException('ошибка сервера', 500);
     }
+  }
+
+  createRoomName(id1: string, id2: string): string {
+    if (typeof id1 !== 'string' && typeof id2 !== 'string') {
+      throw new WsException('id1 и id2 должны быть строками');
+    }
+    return id1 + ' ' + id2;
+  }
+
+  async getDialogue(idDialogue: string): Promise<MessageUser[] | null> {
+    try {
+      const findDialogue = await this.dialogueModel
+        .findOne({ id: idDialogue })
+        .exec();
+
+      if (!findDialogue) {
+        return null;
+      }
+
+      return findDialogue.messages.slice(0, 10);
+    } catch (error) {
+      if (error instanceof WsException) {
+        throw new WsException('Ошибка при получении диалога');
+      }
+
+      throw new HttpException('Серверная ошибка', 500);
+    }
+  }
+
+  creeatePropertyRooms(
+    roomName: string,
+    user1Id: string,
+    user2Id: string,
+    clientObj: Client,
+  ) {
+    if (!clientObj.room) {
+      clientObj.room = {
+        roomName: roomName,
+        user1Id: user1Id,
+        user2Id: user2Id,
+      };
+    }
+  }
+
+  async createDialogue(
+    user1Id: string,
+    user2Id: string,
+    messages: MessageUser[],
+  ): Promise<Dialogue> {
+    const newDialogue = new this.dialogueModel({
+      id: this.createRoomName(user1Id, user2Id),
+      user1Id,
+      user2Id,
+      messages,
+    });
+    return await newDialogue.save();
   }
 }

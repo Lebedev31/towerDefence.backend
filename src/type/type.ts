@@ -33,17 +33,3 @@ export interface EnvConfig {
 export interface MessageClient {
   message: any;
 }
-
-export interface MessageUser extends Document {
-  id: string;
-  message: string;
-  date: Date;
-  isRead: boolean;
-}
-
-export interface Dialogue extends Document {
-  id: string;
-  user1Id: string;
-  user2Id: string;
-  messages: MessageUser[];
-}

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { Dialogue } from '../../type/type';
-import { MessageUser } from '../../type/type';
+import { Dialogue } from '../type/type';
+import { MessageUser } from '../type/type';
 // Определение схемы диалога для MongoDB через Mongoose
 
 export const MessageUserSchema = new mongoose.Schema<MessageUser>({
