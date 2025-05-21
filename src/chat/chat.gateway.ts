@@ -11,6 +11,7 @@ import { Socket, Server } from 'socket.io';
 import { Injectable } from '@nestjs/common';
 import { ChatRedisService } from './chat.redis.service';
 import { SocketChatListener, Client, PayloadId } from './type/type';
+import { MessageUserPayload } from './type/type';
 
 @WebSocketGateway({
   cors: {
@@ -25,43 +26,71 @@ export class ChatGateway {
     private readonly chatService: ChatService,
     private readonly chatRedisService: ChatRedisService,
   ) {}
-  private clients = new Map<string, Client>();
+
+  // Ключ - id пользователя из БД, значение - объект Client
+  private clients = new Map<string, Client[]>();
+
   @WebSocketServer()
   private server: Server;
 
   private handleConnection(client: Socket) {
-    this.clients.set(client.id, {
-      id: client.id,
-      socket: client,
-    });
     console.log(`Клиент подключился: ${client.id}`);
+    // Регистрация произойдет только после получения персональных данных
   }
 
   private handleDisconnect(client: Socket) {
-    this.clients.delete(client.id);
-    console.log(`Клиент отключился: ${client.id}`);
+    const socketId = client.id;
+
+    // Ищем пользователя по socketId во всех записях
+    for (const [userId, clientConnections] of this.clients.entries()) {
+      const connectionIndex = clientConnections.findIndex(
+        (c) => c.socket.id === socketId,
+      );
+
+      if (connectionIndex !== -1) {
+        // Удаляем соединение из массива
+        clientConnections.splice(connectionIndex, 1);
+
+        // Если у пользователя больше нет активных соединений, удаляем его из Map
+        if (clientConnections.length === 0) {
+          this.clients.delete(userId);
+        }
+
+        console.log(`Клиент отключился: ${socketId}, пользователь: ${userId}`);
+        break;
+      }
+    }
+
     this.broadcastClientsList();
   }
 
-  private getOtherClients(currentClientId: string, currentUserId: string) {
-    return Array.from(this.clients.values())
-      .filter((client) => {
-        // Отфильтровываем текущего клиента И любых клиентов с таким же userId
-        return (
-          client.infoClient &&
-          client.id !== currentClientId &&
-          String(client.infoClient.id) !== String(currentUserId)
-        );
-      })
-      .map((client) => client.infoClient);
+  private getOtherClients(currentUserId: string) {
+    // Создаем массив уникальных пользователей
+    const uniqueUsers = new Set<string>();
+    const result: Array<{ id: string; name: string }> = [];
+
+    for (const [userId, clientConnections] of this.clients.entries()) {
+      // Пропускаем текущего пользователя
+      if (userId === currentUserId || clientConnections.length === 0) {
+        continue;
+      }
+
+      // Добавляем только уникальных пользователей
+      if (!uniqueUsers.has(userId)) {
+        uniqueUsers.add(userId);
+        result.push(clientConnections[0].infoClient!);
+      }
+    }
+
+    return result;
   }
 
   // Отправить всем актуальный список (каждому — без него самого)
   private broadcastClientsList() {
-    for (const [id, client] of this.clients.entries()) {
-      if (client.infoClient) {
-        const userId = client.infoClient.id;
-        const others = this.getOtherClients(id, userId);
+    for (const [userId, clientConnections] of this.clients.entries()) {
+      // Для каждого соединения текущего пользователя
+      for (const client of clientConnections) {
+        const others = this.getOtherClients(userId);
         client.socket.emit(SocketChatListener.GETCHATLIST, others);
       }
     }
@@ -69,34 +98,38 @@ export class ChatGateway {
 
   @SubscribeMessage(SocketChatListener.PESRSONALDATA)
   private async setPersonalData(@ConnectedSocket() client: Socket) {
-    const id = client.id;
+    const socketId = client.id;
     const token = client.handshake.auth.token as string;
-    const element = this.clients.get(id);
     const payload = await this.chatService.getInfoClient(token);
-    const duplicateExists = Array.from(this.clients.values())
-      // Исключаем текущего клиента
-      .filter((client) => client.id !== id)
-      // Проверяем, что у клиента уже установлен infoClient и приводим оба идентификатора к строке
-      .some(
-        (client) =>
-          client.infoClient &&
-          String(client.infoClient.id) === String(payload.id),
-      );
-    if (element && !element.infoClient && !duplicateExists) {
-      element.infoClient = payload;
-      this.broadcastClientsList();
-    } else {
-      const userId = payload.id;
-      client.emit(
-        SocketChatListener.GETCHATLIST,
-        this.getOtherClients(id, userId),
-      );
 
-      if (element && !element.infoClient) {
-        // если пользователь зайдет с другой страницы по тому же ид, присвоим его новому сокету
-        element.infoClient = payload;
-      }
+    if (!payload || !payload.id) {
+      throw new WsException('Недействительные данные пользователя');
     }
+
+    const userId = String(payload.id);
+
+    // Создаем новое соединение для пользователя
+    const newClient: Client = {
+      id: socketId,
+      socket: client,
+      infoClient: payload,
+    };
+
+    // Если у пользователя уже есть соединения, добавляем новое
+    if (this.clients.has(userId)) {
+      this.clients.get(userId)!.push(newClient);
+    } else {
+      // Иначе создаем новую запись
+      this.clients.set(userId, [newClient]);
+    }
+
+    console.log(`Клиент авторизован: ${socketId}, пользователь: ${userId}`);
+
+    // Отправляем пользователю список других пользователей
+    client.emit(SocketChatListener.GETCHATLIST, this.getOtherClients(userId));
+
+    // Уведомляем всех об обновлении списка пользователей
+    this.broadcastClientsList();
   }
 
   private async getCashDialogue(
@@ -116,75 +149,153 @@ export class ChatGateway {
     this.server.to(roomName).emit(event, message);
   }
 
+  // Вспомогательный метод для получения userId по socketId
+  private getUserIdBySocketId(socketId: string): string | null {
+    for (const [userId, clientConnections] of this.clients.entries()) {
+      if (clientConnections.some((c) => c.socket.id === socketId)) {
+        return userId;
+      }
+    }
+    return null;
+  }
+
+  // вспомогаетльный метод для отправки кешированых данных, если кому пишут нет в сети
+  private async sendCachedOfflineMessages(roomName: string, client: Socket) {
+    // Если пользователя нет в сети, получаем кешированные данные
+    const existingCash = await this.getCashDialogue(roomName, client);
+
+    if (!existingCash) {
+      const messages = await this.chatService.getDialogue(roomName);
+
+      if (!messages) {
+        client.emit(SocketChatListener.GETCASHDIALOGUE, []);
+      } else {
+        await this.chatRedisService.createRoomDialogue(roomName, messages);
+        client.emit(SocketChatListener.GETCASHDIALOGUE, messages);
+      }
+    }
+  }
+
+  // вспомогательный метод для создания комнаты, если оба пользователя в сети
+  private async createRoomIfBothOnline(
+    client: Socket,
+    roomName: string,
+    userId: string,
+    user2Id: string,
+  ) {
+    // Если второй пользователь в сети, добавляем обоих в общую комнату
+    await client.join(roomName);
+
+    // Добавляем свойство комнаты к текущему клиенту
+    const clientConnections = this.clients.get(userId)!;
+    const currentClient = clientConnections.find(
+      (c) => c.socket.id === client.id,
+    )!;
+
+    this.chatService.creeatePropertyRooms(
+      roomName,
+      userId,
+      user2Id,
+      currentClient,
+    );
+
+    // Для второго пользователя подключаем все его сокеты к комнате
+    const user2Connections = this.clients.get(user2Id) || [];
+    for (const user2Client of user2Connections) {
+      this.chatService.creeatePropertyRooms(
+        roomName,
+        userId,
+        user2Id,
+        currentClient,
+      );
+      await user2Client.socket.join(roomName);
+    }
+
+    // Получаем диалог и отправляем участникам
+    const messages = await this.chatService.getDialogue(roomName);
+
+    if (messages) {
+      this.emitRoomMessages(
+        roomName,
+        SocketChatListener.GETCASHDIALOGUE,
+        messages,
+      );
+    } else {
+      this.emitRoomMessages(roomName, SocketChatListener.GETCASHDIALOGUE, []);
+    }
+  }
+
   @SubscribeMessage(SocketChatListener.STARTCHAT)
   private async startChat(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: PayloadId,
   ) {
-    const user1Id = this.clients.get(client.id)?.infoClient?.id;
-    if (data && user1Id) {
-      const user2Id = data.id; // проверяем, что данные не пустые
-      const roomName = this.chatService.createRoomName(user1Id, user2Id); // создание имени комнаты
-      const existingUser2 = Array.from(this.clients.values()).some(
-        (client) => client.infoClient && client.infoClient.id === user2Id, // проверка есть ли в сети 2 пользователь, которому отправляем сообщение
-      );
+    const userId = this.getUserIdBySocketId(client.id);
 
-      if (!existingUser2) {
-        // если пользователя с которым мы хотиим создать диалог нет в в сети, то комнату не создаем, а просто получаем кешироанные данные
-        const existingCash = await this.getCashDialogue(roomName, client);
-        if (!existingCash) {
-          const messages = await this.chatService.getDialogue(roomName); // если кеша нет, то получаем из базы данных диалог либо создаем новый
-          // если диалог не найден, то отправляем пустой массив
-          if (!messages) {
-            client.emit(SocketChatListener.GETCASHDIALOGUE, []);
-            return; // завершаем функцию  если пустой массив
-          } else {
-            await this.chatRedisService.createRoomDialogue(roomName, messages); // если диалог найден, то записываем его в кеш, затем отправляем клиенту и завершаем функцию
-            client.emit(SocketChatListener.GETCASHDIALOGUE, messages);
-            return;
-          }
+    if (!userId || !data) {
+      throw new WsException('Ошибка при создании диалога');
+    }
+
+    const user2Id = String(data.id);
+    const roomName = this.chatService.createRoomName(userId, user2Id);
+
+    // Проверяем, есть ли пользователь 2 в сети
+    const user2Online = this.clients.has(user2Id);
+
+    if (!user2Online) {
+      await this.sendCachedOfflineMessages(roomName, client);
+    } else {
+      await this.createRoomIfBothOnline(client, roomName, userId, user2Id);
+    }
+  }
+
+  @SubscribeMessage(SocketChatListener.SENDMESSAGE)
+  private async sendMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: MessageUserPayload,
+  ) {
+    const userId = this.getUserIdBySocketId(client.id);
+
+    if (!userId || !data || !data.message) {
+      throw new WsException('Ошибка при отправке сообщения');
+    }
+
+    const recipientId = String(data.message.id);
+    const roomName = this.chatService.createRoomName(userId, recipientId);
+
+    const existingRoom = await this.chatRedisService.getRoomDialogue(roomName);
+
+    if (!existingRoom) {
+      // Если комнаты нет в кеше, проверяем базу данных
+      const findMessages = await this.chatService.getDialogue(roomName);
+
+      if (!findMessages) {
+        // Создаем новый диалог
+        const createDialog = await this.chatService.createDialogue(
+          userId,
+          recipientId,
+          [data.message],
+        );
+
+        await this.chatRedisService.createRoomDialogue(
+          roomName,
+          createDialog.messages,
+        );
+
+        const user2Online = this.clients.has(data.message.id);
+        if (!user2Online) {
+          await this.sendCachedOfflineMessages(roomName, client);
         } else {
-          return; // если кеш есть завершаем функцию
+          await this.createRoomIfBothOnline(
+            client,
+            roomName,
+            userId,
+            data.message.id,
+          );
         }
       } else {
-        // если второй пользователь в сети, добавляем обоих в общую комнату
-        await client.join(roomName);
-        //добавляем пользователя в комнату №1
-        this.chatService.creeatePropertyRooms(
-          roomName,
-          user1Id,
-          user2Id,
-          this.clients.get(client.id)!,
-        );
-        for (const clientItem of this.clients.values()) {
-          if (clientItem.infoClient && clientItem.infoClient.id === user2Id) {
-            // добавляем пользователя в комнату №2
-            this.chatService.creeatePropertyRooms(
-              roomName,
-              user2Id,
-              user1Id,
-              clientItem,
-            );
-            await clientItem.socket.join(roomName);
-          }
-        }
-
-        const messages = await this.chatService.getDialogue(roomName); //получаем кешированные данные
-        // если они есть, то отправляем участникам комнаты
-        if (messages) {
-          this.emitRoomMessages(
-            roomName,
-            SocketChatListener.GETCASHDIALOGUE,
-            messages,
-          );
-          return;
-        }
-        // если их нет, то возвращаем пустой массив
-        this.emitRoomMessages(roomName, SocketChatListener.GETCASHDIALOGUE, []);
-        return;
+        // если диалог уже существует, то добавляем собщение в кеш, и
       }
-    } else {
-      throw new WsException('Ошибка при создании диалога'); // если данные пустые, то выбрасываем ошибку
     }
   }
 }

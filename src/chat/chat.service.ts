@@ -1,11 +1,12 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { User } from '../type/type';
+import { User, EnvConfig } from '../type/type';
 import { TokenService } from '../token/token.service';
 import { AuthPublicData } from '../type/type';
 import { WsException } from '@nestjs/websockets';
-import { Dialogue, MessageUser, Client } from './type/type';
+import { Dialogue, Client, Message, MessageUser } from './type/type';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class ChatService {
@@ -13,6 +14,7 @@ export class ChatService {
     @InjectModel('User') private readonly userModel: Model<User>,
     private readonly tokenService: TokenService,
     @InjectModel('Dialogue') private readonly dialogueModel: Model<Dialogue>,
+    private readonly configService: ConfigService<EnvConfig>,
   ) {}
 
   async getInfoClient(token: string): Promise<AuthPublicData> {
@@ -51,8 +53,10 @@ export class ChatService {
       if (!findDialogue) {
         return null;
       }
+      const limmitMessage =
+        this.configService.getOrThrow<string>('MESSAGE_CASH_LIMIT');
 
-      return findDialogue.messages.slice(0, 10);
+      return findDialogue.messages.slice(0, +limmitMessage);
     } catch (error) {
       if (error instanceof WsException) {
         throw new WsException('Ошибка при получении диалога');
@@ -80,14 +84,23 @@ export class ChatService {
   async createDialogue(
     user1Id: string,
     user2Id: string,
-    messages: MessageUser[],
+    messages: Message[],
   ): Promise<Dialogue> {
-    const newDialogue = new this.dialogueModel({
-      id: this.createRoomName(user1Id, user2Id),
-      user1Id,
-      user2Id,
-      messages,
-    });
-    return await newDialogue.save();
+    try {
+      const newDialogue = new this.dialogueModel({
+        id: this.createRoomName(user1Id, user2Id),
+        user1Id,
+        user2Id,
+        messages,
+      });
+      return await newDialogue.save();
+    } catch (error) {
+      console.log(error);
+      if (error instanceof WsException) {
+        throw new WsException('Ошибка при создании диалога');
+      }
+
+      throw new HttpException('Серверная ошибка', 500);
+    }
   }
 }

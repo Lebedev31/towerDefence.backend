@@ -28,6 +28,7 @@ export interface EnvConfig {
   JWT_SECRET_REFRESH: string;
   JWT_SECRET_ACCESS: string;
   REDIS_URL: string;
+  MESSAGE_CASH_LIMIT: string;
 }
 
 export interface MessageClient {

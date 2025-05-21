@@ -38,6 +38,7 @@ export enum SocketChatListener {
   PESRSONALDATA = 'personalData',
   STARTCHAT = 'startChat',
   GETCASHDIALOGUE = 'getCashDialogue',
+  SENDMESSAGE = 'sendMessage',
 }
 
 /*
@@ -48,12 +49,14 @@ export enum SocketChatListener {
   - date: дата и время создания сообщения.
   - isRead: флаг, показывающий, было ли сообщение прочитано.
 */
-export interface MessageUser extends Document {
+export interface Message {
   id: string;
   message: string;
   date: Date;
   isRead: boolean;
 }
+
+export type MessageUser = Message & Document;
 
 /*
   Интерфейс Dialogue расширяет Document Mongoose и описывает диалог между двумя пользователями.
@@ -80,8 +83,10 @@ export interface PayloadId {
 }
 
 export interface RedisRoomChat {
-  nameChat: {
-    messageArr1: MessageUser[];
-    messageArr2: MessageUser[];
-  };
+  messageArr1: Message[];
+  messageArr2: Message[];
+}
+
+export interface MessageUserPayload {
+  message: Message;
 }
