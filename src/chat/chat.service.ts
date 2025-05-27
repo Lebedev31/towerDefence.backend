@@ -41,7 +41,8 @@ export class ChatService {
     if (typeof id1 !== 'string' && typeof id2 !== 'string') {
       throw new WsException('id1 и id2 должны быть строками');
     }
-    return id1 + ' ' + id2;
+    const [first, second] = [id1, id2].sort();
+    return `${first}:${second}`;
   }
 
   async getDialogue(idDialogue: string): Promise<MessageUser[] | null> {
@@ -84,14 +85,14 @@ export class ChatService {
   async createDialogue(
     user1Id: string,
     user2Id: string,
-    messages: Message[],
+    message: Message,
   ): Promise<Dialogue> {
     try {
       const newDialogue = new this.dialogueModel({
         id: this.createRoomName(user1Id, user2Id),
         user1Id,
         user2Id,
-        messages,
+        messages: [message],
       });
       return await newDialogue.save();
     } catch (error) {

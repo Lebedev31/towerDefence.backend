@@ -8,8 +8,8 @@ import { EnvConfig } from './type/type';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService<EnvConfig>);
-  const frontendUrl = configService.get<string>('FRONTEND_URL');
+  const configService = app.get(ConfigService < EnvConfig >);
+  const frontendUrl = configService.get < string > ('FRONTEND_URL');
   app.enableCors({
     origin: [frontendUrl],
     credentials: true,
@@ -30,7 +30,7 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
   app.use(cookieParser());
-  const port = configService.get<number>('PORT');
+  const port = configService.get < number > ('PORT');
   await app.listen(port ?? 5000);
 }
 bootstrap();

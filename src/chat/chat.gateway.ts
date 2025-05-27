@@ -127,7 +127,6 @@ export class ChatGateway {
 
     // Отправляем пользователю список других пользователей
     client.emit(SocketChatListener.GETCHATLIST, this.getOtherClients(userId));
-
     // Уведомляем всех об обновлении списка пользователей
     this.broadcastClientsList();
   }
@@ -136,7 +135,10 @@ export class ChatGateway {
     roomName: string,
     client: Socket,
   ): Promise<boolean> {
-    const roomMessages = await this.chatRedisService.getRoomDialogue(roomName);
+    const roomMessages = await this.chatRedisService.getRoomDialogue(
+      roomName,
+      1,
+    );
     if (roomMessages) {
       client.emit(SocketChatListener.GETCASHDIALOGUE, roomMessages);
       return true;
@@ -166,7 +168,6 @@ export class ChatGateway {
 
     if (!existingCash) {
       const messages = await this.chatService.getDialogue(roomName);
-
       if (!messages) {
         client.emit(SocketChatListener.GETCASHDIALOGUE, []);
       } else {
@@ -212,7 +213,7 @@ export class ChatGateway {
     }
 
     // Получаем диалог и отправляем участникам
-    const messages = await this.chatService.getDialogue(roomName);
+    const messages = await this.chatRedisService.getRoomDialogue(roomName, 1);
 
     if (messages) {
       this.emitRoomMessages(
@@ -222,6 +223,23 @@ export class ChatGateway {
       );
     } else {
       this.emitRoomMessages(roomName, SocketChatListener.GETCASHDIALOGUE, []);
+    }
+  }
+
+  private async getMessagesUsers(
+    // обьеденяет проверу и выполняет один из двух перыдущих методов
+    client: Socket,
+    roomName: string,
+    userId: string,
+    user2Id: string,
+  ) {
+    const user2Online = this.clients.has(user2Id);
+    if (!user2Online) {
+      await this.sendCachedOfflineMessages(roomName, client);
+      console.log(0);
+    } else {
+      await this.createRoomIfBothOnline(client, roomName, userId, user2Id);
+      console.log(1);
     }
   }
 
@@ -239,14 +257,8 @@ export class ChatGateway {
     const user2Id = String(data.id);
     const roomName = this.chatService.createRoomName(userId, user2Id);
 
-    // Проверяем, есть ли пользователь 2 в сети
-    const user2Online = this.clients.has(user2Id);
-
-    if (!user2Online) {
-      await this.sendCachedOfflineMessages(roomName, client);
-    } else {
-      await this.createRoomIfBothOnline(client, roomName, userId, user2Id);
-    }
+    // Проверяем, есть ли пользователь 2 в сети, и загружаем чат
+    await this.getMessagesUsers(client, roomName, userId, user2Id);
   }
 
   @SubscribeMessage(SocketChatListener.SENDMESSAGE)
@@ -263,39 +275,35 @@ export class ChatGateway {
     const recipientId = String(data.message.id);
     const roomName = this.chatService.createRoomName(userId, recipientId);
 
-    const existingRoom = await this.chatRedisService.getRoomDialogue(roomName);
+    const existingRoom = await this.chatRedisService.getRoomDialogue(
+      roomName,
+      3,
+    );
 
     if (!existingRoom) {
       // Если комнаты нет в кеше, проверяем базу данных
       const findMessages = await this.chatService.getDialogue(roomName);
-
       if (!findMessages) {
         // Создаем новый диалог
         const createDialog = await this.chatService.createDialogue(
           userId,
           recipientId,
-          [data.message],
+          data.message,
         );
-
         await this.chatRedisService.createRoomDialogue(
           roomName,
           createDialog.messages,
         );
-
-        const user2Online = this.clients.has(data.message.id);
-        if (!user2Online) {
-          await this.sendCachedOfflineMessages(roomName, client);
-        } else {
-          await this.createRoomIfBothOnline(
-            client,
-            roomName,
-            userId,
-            data.message.id,
-          );
-        }
       } else {
-        // если диалог уже существует, то добавляем собщение в кеш, и
+        // если диалог уже существует, то добавляем собщение в кеш, и отправляем
+        await this.chatRedisService.createRoomDialogue(roomName, data.message);
+        await this.chatRedisService.cashLimitMessage(data.message, roomName);
       }
+    } else {
+      // если кеш есть, то просто добавляем сообщение в кеш и отправялем
+      await this.chatRedisService.cashLimitMessage(data.message, roomName);
     }
+
+    await this.getMessagesUsers(client, roomName, userId, data.message.id);
   }
 }

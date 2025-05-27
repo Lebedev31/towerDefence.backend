@@ -13,7 +13,7 @@ import { redisStore } from 'cache-manager-redis-store';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService<EnvConfig>) => ({
         secret: configService.getOrThrow<string>('JWT_SECRET_ACCESS'),
-        signOptions: { expiresIn: '15m' },
+        signOptions: { expiresIn: '50m' },
       }),
       inject: [ConfigService],
     }),
