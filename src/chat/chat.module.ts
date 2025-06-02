@@ -7,8 +7,13 @@ import { TokenModule } from '../token/token.module';
 import { DialogueSchema } from './models/dialogue.model';
 import { ChatRedisService } from './chat.redis.service';
 
+
 @Module({
-  providers: [ChatGateway, ChatService, ChatRedisService],
+  providers: [
+    ChatGateway,
+    ChatService,
+    ChatRedisService,
+  ],
   imports: [
     MongooseModule.forFeature([
       { name: 'User', schema: userSchema },
@@ -17,4 +22,4 @@ import { ChatRedisService } from './chat.redis.service';
     TokenModule,
   ],
 })
-export class ChatModule {}
+export class ChatModule { }

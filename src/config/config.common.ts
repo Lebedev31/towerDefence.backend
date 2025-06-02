@@ -4,9 +4,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EnvConfig } from '../type/type';
 import { CacheModule } from '@nestjs/cache-manager';
-import { redisStore } from 'cache-manager-redis-store';
+import { createKeyv } from '@keyv/redis';
 
-@Global() // Делаем модуль глобальным
+@Global()
 @Module({
   imports: [
     JwtModule.registerAsync({
@@ -20,10 +20,8 @@ import { redisStore } from 'cache-manager-redis-store';
 
     CacheModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService<EnvConfig>) => ({
-        store: await redisStore({
-          url: configService.getOrThrow<string>('REDIS_URL'),
-        }),
+      useFactory: (configService: ConfigService<EnvConfig>) => ({
+        store: createKeyv(configService.getOrThrow<string>('REDIS_URL')),
         isGlobal: true,
       }),
       inject: [ConfigService],

@@ -4,11 +4,18 @@ export interface Auth extends Document {
   email: string;
   password: string;
 }
+
+export interface Friend {
+  id: string;
+  name: string;
+}
+
 export interface User extends Auth {
   // Пользователь
   name: string;
   email: string;
   password: string;
+  friends: Friend[];
 }
 
 export interface UserPublicData {
@@ -29,6 +36,7 @@ export interface EnvConfig {
   JWT_SECRET_ACCESS: string;
   REDIS_URL: string;
   MESSAGE_CASH_LIMIT: string;
+  RESIS_TTL_DIALOGUE: string;
 }
 
 export interface MessageClient {

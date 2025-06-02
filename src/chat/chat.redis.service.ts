@@ -1,6 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { Cache } from 'cache-manager';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { EnvConfig } from '../type/type';
@@ -10,43 +8,64 @@ import { Message, RedisRoomChat } from './type/type';
 import { WsException } from '@nestjs/websockets';
 import { Dialogue } from './type/type';
 import { MongooseError } from 'mongoose';
+import { RedisService } from '../redis/redis.service';
 
 type ModReturnCash = 1 | 2 | 3;
 
 @Injectable()
 export class ChatRedisService {
+  private ttl: number;
   constructor(
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheManager: RedisService,
     @InjectModel('Dialogue') private readonly dialogueModel: Model<Dialogue>,
     private readonly configService: ConfigService<EnvConfig>,
     private readonly chatService: ChatService,
-  ) {}
+  ) {
+    this.ttl = Number(
+      this.configService.getOrThrow < string > ('RESIS_TTL_DIALOGUE'),
+    );
+  }
 
+  /** Создаёт новый «комнатный» кэш, если его нет */
   async createRoomDialogue(nameRoom: string, message: Message | Message[]) {
-    const existingCash = await this.getRoomDialogue(nameRoom.trim(), 3);
-    if (existingCash) {
+    const existingCache = await this.getRoomDialogue(nameRoom.trim(), 3);
+    if (existingCache) {
       return;
     }
-    const cash: RedisRoomChat = {
+
+    const cacheObj: RedisRoomChat = {
       messageArr1: [],
       messageArr2: [],
     };
     if (Array.isArray(message)) {
-      cash.messageArr1.push(...message);
+      cacheObj.messageArr1.push(...message);
     } else {
-      cash.messageArr1.push(message);
+      cacheObj.messageArr1.push(message);
     }
-    await this.cacheManager.set<RedisRoomChat>(nameRoom, cash, 3600 * 100);
+
+    // СЕРИАЛИЗУЕМ В JSON
+    await this.cacheManager.set(nameRoom, JSON.stringify(cacheObj), this.ttl);
+    await this.createBackupKey(nameRoom);
   }
 
+  /** Читает из Redis и парсит JSON. Если ключа нет — возвращает null */
   async getRoomDialogue(
     nameRoom: string,
     mod: ModReturnCash,
   ): Promise<RedisRoomChat | null | Message[]> {
-    const roomMessages = await this.cacheManager.get<RedisRoomChat>(nameRoom);
-    if (!roomMessages) {
+    const raw = await this.cacheManager.get(nameRoom); // raw: string | null
+    if (!raw) {
       return null;
     }
+
+    let roomMessages: RedisRoomChat;
+    try {
+      roomMessages = JSON.parse(raw);
+    } catch (e) {
+      // Некорректный JSON в кеше
+      throw new WsException('Некорректные данные в кеше Redis');
+    }
+
     switch (mod) {
       case 1:
         return roomMessages.messageArr1;
@@ -62,61 +81,65 @@ export class ChatRedisService {
   private async pushNewMessage(
     message: Message,
     flag: boolean,
-    cash: RedisRoomChat,
+    cacheObj: RedisRoomChat,
     roomName: string,
-    limmit?: number,
+    limit?: number,
   ): Promise<void> {
     if (flag) {
-      // если 1 кеш меньше лимита
-      cash.messageArr1.push(message); // добавляем новое сообщение в начало кеша
+      // если текущий cache меньше лимита
+      cacheObj.messageArr1.push(message);
     } else {
-      // если кеш больше лимита, то удаляем последний элемент и добавляем в второй кеш
-      if (limmit && cash.messageArr2.length < limmit) {
-        const del = cash.messageArr1.pop() as Message;
-        cash.messageArr1.push(message);
-        cash.messageArr2.push(del);
+      // если cache больше лимита…
+      if (limit && cacheObj.messageArr2.length < limit) {
+        const del = cacheObj.messageArr1.shift()!;
+        cacheObj.messageArr2.push(del);
       } else if (roomName) {
-        // второй кеш полный то очищаем его и передаем сообщения в монго
+        // второй cache полный → сбрасываем его в Mongo
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const update = await this.dialogueModel.updateOne(
+          await this.dialogueModel.updateOne(
             { id: roomName },
-            {
-              $push: { messages: { $each: cash.messageArr2 } },
-            },
+            { $push: { messages: { $each: cacheObj.messageArr2 } } },
           );
-
-          cash.messageArr2 = []; // очищаем второй кеш
+          cacheObj.messageArr2 = [];
         } catch (error) {
           console.log(error);
           if (error instanceof MongooseError || error instanceof WsException) {
-            throw new WsException(
-              'Ошибка при обновлении сообщений в базе данных',
-            );
+            throw new WsException('Ошибка при обновлении сообщений в БД');
           }
         }
       }
+      cacheObj.messageArr1.push(message);
     }
-    // сохраняем обновленный кеш
-    await this.cacheManager.set<RedisRoomChat>(roomName, cash, 3600 * 100);
+
+    // Снова сериализуем весь объект и сохраняем в Redis
+    await this.cacheManager.set(roomName, JSON.stringify(cacheObj), this.ttl);
+    await this.createBackupKey(roomName);
   }
 
   async cashLimitMessage(message: Message, roomName: string) {
-    const cash = (await this.getRoomDialogue(roomName, 3)) as RedisRoomChat;
-    const newCash: RedisRoomChat = {
-      messageArr1: [...cash.messageArr1],
-      messageArr2: [...cash.messageArr2],
-    };
-    if (!cash) throw new WsException('Кеша не существует');
+    const cacheRaw = await this.getRoomDialogue(roomName, 3);
+    if (!cacheRaw || Array.isArray(cacheRaw)) {
+      // Проверяем, что вернулся именно RedisRoomChat
+      throw new WsException('Кэш не существует или повреждён');
+    }
 
-    const size = cash.messageArr1.length;
-    const limmit = Number(
-      this.configService.getOrThrow<string>('MESSAGE_CASH_LIMIT'),
+    const cacheObj = cacheRaw as RedisRoomChat;
+    const size = cacheObj.messageArr1.length;
+    const limit = Number(
+      this.configService.getOrThrow < string > ('MESSAGE_CASH_LIMIT'),
     );
-    if (size < limmit) {
-      await this.pushNewMessage(message, true, newCash, roomName);
+    if (size < limit) {
+      await this.pushNewMessage(message, true, cacheObj, roomName);
     } else {
-      await this.pushNewMessage(message, false, newCash, roomName, limmit);
+      await this.pushNewMessage(message, false, cacheObj, roomName, limit);
     }
   }
+
+  /** Создаёт «резервный» ключ (_имя) с пустым значением, просто чтобы у ключа был ttl */
+  private async createBackupKey(originalKey: string): Promise<void> {
+    const backupKey = `_chat_${originalKey}`;
+    // Храним пустую строку, но с ttl
+    await this.cacheManager.set(backupKey, '', this.ttl - 5);
+  }
 }
+

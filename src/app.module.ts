@@ -9,6 +9,7 @@ import { CommonModule } from './config/config.common';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AvtorizationMiddleware } from './middleware/avtorization.middleware';
 import { ChatModule } from './chat/chat.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ChatModule } from './chat/chat.module';
     CommonModule,
     TokenModule,
     ChatModule,
+    RedisModule,
   ],
 })
 export class AppModule implements NestModule {
