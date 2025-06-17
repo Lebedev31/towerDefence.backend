@@ -1,4 +1,4 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { Socket } from 'socket.io';
 
 /*
@@ -39,6 +39,7 @@ export enum SocketChatListener {
   STARTCHAT = 'startChat',
   GETCASHDIALOGUE = 'getCashDialogue',
   SENDMESSAGE = 'sendMessage',
+  GETGLOBALIST = 'getGlobalList',
 }
 
 /*
@@ -89,4 +90,34 @@ export interface RedisRoomChat {
 
 export interface MessageUserPayload {
   message: Message;
+}
+
+/// типы для глобального чата
+// глобальное сообшение в чате
+//
+export interface GlobalMessages {
+  nameUser: string;
+  patchAvatar: string;
+  idUser: string;
+  answers?: string;
+  timestamp: Date;
+  like: number;
+  dislike: number;
+  text: string;
+  parentid?: Types.ObjectId;
+}
+// документ для монго
+export type GlobalMessagesDocument = GlobalMessages & Document;
+
+/*
+ интерфейс двухуровневого кеша в глобальном чате
+*/
+// глобальная ветка сообщения с рекурсивным типом
+export type GlobalMessagesCash = GlobalMessages & {
+  messages?: GlobalMessages[];
+};
+
+export interface GlobalMessageCashRoom {
+  messageArr1: GlobalMessagesCash[];
+  messageArr2: GlobalMessagesCash[];
 }

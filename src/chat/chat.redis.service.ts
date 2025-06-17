@@ -3,26 +3,27 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { EnvConfig } from '../type/type';
 import { ConfigService } from '@nestjs/config';
-import { ChatService } from './chat.service';
 import { Message, RedisRoomChat } from './type/type';
 import { WsException } from '@nestjs/websockets';
 import { Dialogue } from './type/type';
 import { MongooseError } from 'mongoose';
 import { RedisService } from '../redis/redis.service';
-
-type ModReturnCash = 1 | 2 | 3;
+import { BaseCasheService, BaseCash } from './abstractClass/base.cashe.service';
 
 @Injectable()
-export class ChatRedisService {
-  private ttl: number;
+export class ChatRedisService
+  extends BaseCasheService<Message, RedisRoomChat>
+  implements BaseCash<Message, RedisRoomChat>
+{
+  protected ttl: number;
   constructor(
-    private readonly cacheManager: RedisService,
+    protected readonly cacheManager: RedisService,
     @InjectModel('Dialogue') private readonly dialogueModel: Model<Dialogue>,
-    private readonly configService: ConfigService<EnvConfig>,
-    private readonly chatService: ChatService,
+    protected readonly configService: ConfigService<EnvConfig>,
   ) {
+    super(cacheManager, configService);
     this.ttl = Number(
-      this.configService.getOrThrow < string > ('RESIS_TTL_DIALOGUE'),
+      this.configService.getOrThrow<string>('RESIS_TTL_DIALOGUE'),
     );
   }
 
@@ -48,37 +49,7 @@ export class ChatRedisService {
     await this.createBackupKey(nameRoom);
   }
 
-  /** Читает из Redis и парсит JSON. Если ключа нет — возвращает null */
-  async getRoomDialogue(
-    nameRoom: string,
-    mod: ModReturnCash,
-  ): Promise<RedisRoomChat | null | Message[]> {
-    const raw = await this.cacheManager.get(nameRoom); // raw: string | null
-    if (!raw) {
-      return null;
-    }
-
-    let roomMessages: RedisRoomChat;
-    try {
-      roomMessages = JSON.parse(raw);
-    } catch (e) {
-      // Некорректный JSON в кеше
-      throw new WsException('Некорректные данные в кеше Redis');
-    }
-
-    switch (mod) {
-      case 1:
-        return roomMessages.messageArr1;
-      case 2:
-        return roomMessages.messageArr2;
-      case 3:
-        return roomMessages;
-      default:
-        return null;
-    }
-  }
-
-  private async pushNewMessage(
+  async pushNewMessage(
     message: Message,
     flag: boolean,
     cacheObj: RedisRoomChat,
@@ -112,34 +83,7 @@ export class ChatRedisService {
     }
 
     // Снова сериализуем весь объект и сохраняем в Redis
-    await this.cacheManager.set(roomName, JSON.stringify(cacheObj), this.ttl);
+    await this.cacheManager.set(roomName, cacheObj, this.ttl);
     await this.createBackupKey(roomName);
   }
-
-  async cashLimitMessage(message: Message, roomName: string) {
-    const cacheRaw = await this.getRoomDialogue(roomName, 3);
-    if (!cacheRaw || Array.isArray(cacheRaw)) {
-      // Проверяем, что вернулся именно RedisRoomChat
-      throw new WsException('Кэш не существует или повреждён');
-    }
-
-    const cacheObj = cacheRaw as RedisRoomChat;
-    const size = cacheObj.messageArr1.length;
-    const limit = Number(
-      this.configService.getOrThrow < string > ('MESSAGE_CASH_LIMIT'),
-    );
-    if (size < limit) {
-      await this.pushNewMessage(message, true, cacheObj, roomName);
-    } else {
-      await this.pushNewMessage(message, false, cacheObj, roomName, limit);
-    }
-  }
-
-  /** Создаёт «резервный» ключ (_имя) с пустым значением, просто чтобы у ключа был ttl */
-  private async createBackupKey(originalKey: string): Promise<void> {
-    const backupKey = `_chat_${originalKey}`;
-    // Храним пустую строку, но с ttl
-    await this.cacheManager.set(backupKey, '', this.ttl - 5);
-  }
 }
-

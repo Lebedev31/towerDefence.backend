@@ -37,6 +37,8 @@ export interface EnvConfig {
   REDIS_URL: string;
   MESSAGE_CASH_LIMIT: string;
   RESIS_TTL_DIALOGUE: string;
+  MESSAGE_CASH_LIMIT_GLOBAL: string;
+  GLOBAL_CHAT: 'globalChat';
 }
 
 export interface MessageClient {

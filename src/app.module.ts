@@ -10,6 +10,9 @@ import { CommonModule } from './config/config.common';
 import { AvtorizationMiddleware } from './middleware/avtorization.middleware';
 import { ChatModule } from './chat/chat.module';
 import { RedisModule } from './redis/redis.module';
+import { FriendsController } from './friends/friends.controller';
+import { FriendsService } from './friends/friends.service';
+import { FriendsModule } from './friends/friends.module';
 
 @Module({
   imports: [
@@ -30,11 +33,14 @@ import { RedisModule } from './redis/redis.module';
     TokenModule,
     ChatModule,
     RedisModule,
+    FriendsModule,
   ],
+  controllers: [FriendsController],
+  providers: [FriendsService],
 })
 export class AppModule implements NestModule {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   configure(consumer: MiddlewareConsumer) {
-    //  consumer.apply(AvtorizationMiddleware).forRoutes('');
+    consumer.apply(AvtorizationMiddleware).forRoutes('friends');
   }
 }

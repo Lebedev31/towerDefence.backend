@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await */
 import {
   CanActivate,
   Injectable,
@@ -5,25 +6,23 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { TokenService } from '../token.service';
-import { Observable } from 'rxjs';
 import { Request, Response } from 'express';
 import { TokenExpiredError } from '@nestjs/jwt';
 
 @Injectable()
 export class AvtorizationGuard implements CanActivate {
   constructor(private readonly tokenService: TokenService) {}
-  canActivate(
-    context: ExecutionContext,
-  ): boolean | Promise<boolean> | Observable<boolean> {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
     const authHeader = request.headers['authorization'] as string;
     const cookieToken = request.cookies['token'] as string; // Если используешь куки
     const token = authHeader.split(' ')[1];
     let flag = false;
-
     try {
-      this.tokenService.verifyToken(token, false);
+      const verife = this.tokenService.verifyToken(token, false);
+      //добавляем распарсенный обьект пайлоада в реквест
+      request.user = verife;
       return true;
     } catch (error) {
       if (error instanceof TokenExpiredError) {
@@ -40,6 +39,7 @@ export class AvtorizationGuard implements CanActivate {
           verife.payload,
         );
         this.tokenService.setAuthorization(response, newAccessToken);
+        request.user = verife;
         return true;
       } catch (error) {
         if (error instanceof Error) {

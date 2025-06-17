@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { User } from '../type/type';
 
 // Определение схемы пользователя для MongoDB через Mongoose
-export const userSchema = new mongoose.Schema < User > ({
+export const userSchema = new mongoose.Schema<User>({
   // Имя пользователя: обязательное, строка, удаляются пробелы по краям
   name: {
     type: String,

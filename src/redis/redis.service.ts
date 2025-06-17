@@ -11,19 +11,26 @@ export class RedisService {
     private readonly configService: ConfigService<EnvConfig>,
   ) {}
 
-  async get(key: string): Promise<string | null> {
-    return this.redisClient.get(key);
+  async get<T>(key: string): Promise<T | null> {
+    const data = await this.redisClient.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as T;
   }
 
-  async set(
+  async set<T>(
     key: string,
-    value: string,
+    value: T,
     ttlSeconds?: number,
-  ): Promise<string | null> {
-    if (ttlSeconds) {
-      return this.redisClient.set(key, value, { EX: ttlSeconds });
+  ): Promise<void | null> {
+    if (value) {
+      const seriallize = JSON.stringify(value);
+      if (ttlSeconds) {
+        await this.redisClient.set(key, seriallize, { EX: ttlSeconds });
+      }
+      await this.redisClient.set(key, seriallize);
     }
-    return this.redisClient.set(key, value);
+
+    return null;
   }
   getClient(): RedisClientType {
     return this.redisClient;
